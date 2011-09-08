@@ -1,0 +1,84 @@
+# a fueled interpreter based on the trampolined terp
+# still with only curried functions: (((f x) y) z)
+# TODO: figure out how to do uncurried functions like (f x y z)
+
+pump(?n, ?exp, ?env, ?k) == ev(?exp, ?env, ?k, ?n-1)
+pump(0, ?exp, ?env, ?k) == EXHAUSTED(?exp, ?env, ?k)
+
+# an expression can be a symbol
+# exp ::= Sym(name)
+# the value of a symbol is looked up in the environment, then returned
+ev(Sym(?name), ?env, ?k, ?fuel) == apply_cont(?k, lookup(?env, ?name), ?fuel)
+
+# an expression can be a nonpair
+#   all nonpairs are already values; just return it
+# exp ::= Nonpair(val)
+
+ev(Nonpair(?val), ?env, ?k, ?fuel) == apply_cont(?k, ?val, ?fuel)
+# an expression can be a quote
+# exp ::= Quote(?x)
+#   take the quotes off and return whatever is inside
+ev(Quote(?x), ?env, ?k, ?fuel) == apply_cont(?k, ?x, ?fuel)
+
+# an expression can be an if
+# exp ::= If(?test, ?truebranch, ?falsebranch)
+#   to eval an if
+#   first eval the test of the if
+#   then use the host-language "if"
+#   to decide whether to eval and return the
+#   true branch or the false branch of the if
+ev(If(?test, ?truebranch, ?falsebranch), ?env, ?k, ?fuel) == pump(?fuel, ?test, ?env, Decide(?truebranch, ?falsebranch, ?env, ?k))
+apply_cont(Decide(?truebranch, ?falsebranch, ?env, ?k), True, ?fuel) == pump(?fuel, ?truebranch, ?env, ?k)
+apply_cont(Decide(?truebranch, ?falsebranch, ?env, ?k), False, ?fuel) == pump(?fuel, ?falsebranch, ?env, ?k)
+
+# an expression can be a lambda
+# exp ::= Lambda(?param, ?body)
+#   construct something that will be sufficient to eval the body,
+#   once we get an actual to bind to that param
+ev(Lambda(?param, ?body), ?env, ?k, ?fuel) == apply_cont(?k, Closure(?param, ?body, ?env), ?fuel)
+
+# an expression can be a function application
+# exp ::= App(?f, ?x)
+#   to eval a function application,
+#   eval the function,
+#   then eval the arg,
+#   then combine the formals with the actuals 
+ev(App(?f, ?x), ?env, ?k, ?fuel) == pump(?fuel, ?f, ?env, Arg(?x, ?env, ?k))
+apply_cont(Arg(?x, ?env, ?k), ?proc, ?fuel) == pump(?fuel, ?x, ?env, Enter(?proc, ?k))
+apply_cont(Enter(Closure(?formal, ?body, ?env), ?k), ?actual, ?fuel) == pump(?fuel, ?body, Extend(?formal, ?actual, ?env), ?k)
+
+# stuff regarding the environment
+# environments can be empty
+# env ::= Empty
+# environments can be extensions of other environments
+# where a particular name is bound to a particular value
+# env ::= Extend(name, value, env)
+
+## bind is a helper function that takes a list of names and
+## a list of values, and binds each name to the corresponding value
+## there's some nonsense about shadowing - just don't do it, mkay?
+#bind(Cons(?n, ?ns), Cons(?v, ?vs), ?env) == bind(?ns, ?vs, Extend(?n, ?v, ?env))
+#bind(Nil, Nil, ?env) == ?env
+
+# lookup looks up a particular name and returns the first one it finds
+lookup(Extend(?n1, ?v, ?env), ?n2) == if ?n1 = ?n2 then ?v else lookup(?env, ?n2)
+
+# Done is the intial continuation
+apply_cont(Done, ?val, ?remaining) == DONE(?remaining, ?val)
+
+# the same, insufficient, test as in direct_terp.req:
+ev(App(Lambda(x, Sym(x)), Quote(123)), Empty, Done, 0)
+ev(App(Lambda(x, Sym(x)), Quote(123)), Empty, Done, 1)
+ev(App(Lambda(x, Sym(x)), Quote(123)), Empty, Done, 2)
+ev(App(Lambda(x, Sym(x)), Quote(123)), Empty, Done, 3)
+ev(App(Lambda(x, Sym(x)), Quote(123)), Empty, Done, 4)
+ev(App(Lambda(x, Sym(x)), Quote(123)), Empty, Done, 5)
+
+# terminates by running out of fuel
+ev(App(Lambda(x, App(Sym(x), Sym(x))), Lambda(x, App(Sym(x), Sym(x)))), Empty, Done, 0)
+ev(App(Lambda(x, App(Sym(x), Sym(x))), Lambda(x, App(Sym(x), Sym(x)))), Empty, Done, 1)
+ev(App(Lambda(x, App(Sym(x), Sym(x))), Lambda(x, App(Sym(x), Sym(x)))), Empty, Done, 2)
+ev(App(Lambda(x, App(Sym(x), Sym(x))), Lambda(x, App(Sym(x), Sym(x)))), Empty, Done, 3)
+ev(App(Lambda(x, App(Sym(x), Sym(x))), Lambda(x, App(Sym(x), Sym(x)))), Empty, Done, 4)
+ev(App(Lambda(x, App(Sym(x), Sym(x))), Lambda(x, App(Sym(x), Sym(x)))), Empty, Done, 5)
+ev(App(Lambda(x, App(Sym(x), Sym(x))), Lambda(x, App(Sym(x), Sym(x)))), Empty, Done, 10000)

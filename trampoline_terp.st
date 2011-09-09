@@ -234,12 +234,12 @@ Exp subclass: Lambda [
   printOn: out [ out nextPutAll: ('Lambda(%1, %2)' % {name. body}) ]
 ]
 
-Cont subclass: Enter [
+Cont subclass: Plug [
   | proc cont |
 
   <comment: 'A continuation that plugs an evalled arg into an evalled closure.'>
 
-  Enter class >> proc: p cont: k [
+  Plug class >> proc: p cont: k [
     <category: 'instance creation'>
     ^((self new) setProc: p setCont: k)
   ]
@@ -260,12 +260,12 @@ Cont subclass: Enter [
   ]
 ]  
 
-Cont subclass: MyArg [
+Cont subclass: Arg [
   | arg env cont |
 
   <comment: 'A continuation that evals the argument of a function, then plugs it into the body.'>
 
-  MyArg class >> arg: a env: e cont: k [
+  Arg class >> arg: a env: e cont: k [
     <category: 'instance creation'>
     ^((self new) setArg: a setEnv: e setCont: k)
   ]
@@ -283,7 +283,7 @@ Cont subclass: MyArg [
   continue: proc [
     <comment: 'Now we eval the arg, next we can plug in and enter the body.'>
 
-    ^(arg ev: env andThen: (Enter proc: proc cont: cont))
+    ^(arg ev: env andThen: (Plug proc: proc cont: cont))
   ]
 ]  
 
@@ -312,7 +312,7 @@ Exp subclass: App [
     then eval the arg,
     then enter the function body, plugging in the value of the arg.'>
 
-    ^(fun ev: env andThen: (MyArg arg: arg env: env cont: k))
+    ^(fun ev: env andThen: (Arg arg: arg env: env cont: k))
   ]
 
   printOn: out [ out nextPutAll: ('App(%1, %2)' % {fun. arg}) ]

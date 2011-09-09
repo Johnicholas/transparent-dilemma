@@ -1,0 +1,15 @@
+% various stupid tests for trampoline_terp.pl
+
+[trampoline_terp].
+
+lookup(foo, extend(foo, bar, baz), X).
+lookup(foo, extend(bar, baz, qux), X).
+
+start(quote(ok), X).
+start(app(lambda(x, sym(x)), quote(ok)), X).
+start(if(app(lambda(x, sym(x)), quote(true)), quote(ok), quote(notok)), X).
+start(if(app(lambda(x, sym(x)), quote(false)), quote(notok), quote(ok)), X).
+
+% this will infinite-loop
+%start(app(lambda(x, app(sym(x), sym(x))), lambda(x, app(sym(x), sym(x)))), X).
+

@@ -1,0 +1,20 @@
+% various stupid tests for fueled_terp.pl
+
+[fuelled_terp].
+
+lookup(foo, extend(foo, bar, baz), X).
+lookup(foo, extend(bar, baz, qux), X).
+
+start(quote(ok), z, X).
+start(quote(ok), s(z), X).
+start(quote(ok), s(s(z)), X).
+
+start(app(lambda(x, sym(x)), quote(ok)), Fuel, X).
+start(if(app(lambda(x, sym(x)), quote(true)), quote(ok), quote(notok)), Fuel, X).
+start(if(app(lambda(x, sym(x)), quote(false)), quote(notok), quote(ok)), Fuel, X).
+
+% this will NOT infinite-loop
+start(app(lambda(x, app(sym(x), sym(x))), lambda(x, app(sym(x), sym(x)))), z, X).
+start(app(lambda(x, app(sym(x), sym(x))), lambda(x, app(sym(x), sym(x)))), s(z), X).
+start(app(lambda(x, app(sym(x), sym(x))), lambda(x, app(sym(x), sym(x)))), s(s(z)), X).
+

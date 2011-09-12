@@ -1,8 +1,8 @@
 % -*-Prolog-*-
+%% I am not a prolog programmer, so I will overcomment everything.
 
 % lookup(+ToFind, +Env, -Out)
 %% inefficient linear search of an association list
-%% I am not a prolog programmer, so I will overcomment everything.
 %% If ToFind matches Key, commit to this rule, and bind Out to Value
 lookup(ToFind, extend(Key, Value, _Env), Out) :- ToFind = Key, !, Out = Value .
 %% If ToFind does not match Key, commit to this rule, and recurse deeper.

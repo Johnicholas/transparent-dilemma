@@ -1,0 +1,58 @@
+# a simple interpreter, in trampolined style,
+# based on the Krivine machine instead of the CEK machine.
+#
+# TODO: figure out how to do uncurried functions like (f x y z)
+#
+# to get to a fueled interpreter,
+# we need to thread a "fuel" argument through the control flow,
+# test-and-decrementing the fuel wherever we
+# want to charge a "step" of computation.
+
+
+
+# an expression can be a symbol
+# exp ::= Sym(name)
+# the value of a symbol is looked up in the environment
+ev(Sym(?n1), Extend(?n2, Closure(?c, ?e1), ?e2), ?s) ==
+  if ?n1 = ?n2 then ev(?c, ?e1, ?s) else ev(Sym(?n1), ?e2, ?s)
+
+# an expression can be a quote
+# exp ::= Quote(quoted)
+#   take the quotes off and return whatever is inside,
+#   but the stack had better be nil, otherwise we're
+#   trying to apply something that is not a function.
+ev(Quote(?x), ?e, Nil) == ?x
+
+# an expression can be a lambda
+# exp ::= Lambda(formal, body)
+# If there is nothing on the stack, then we're done - but we don't
+# try to print it out, because the body would have to be interpreted
+# in light of the environment? I guess?
+ev(Lambda(?formal, ?body), ?e, Nil) == Function
+# However, if there is something on the stack,
+# we bind it to the formal parameter and continue into the body.
+ev(Lambda(?formal, ?body), ?e, Cons(?actual, ?stack)) ==
+  ev(?body, Extend(?formal, ?actual, ?e), ?stack)
+
+# an expression can be a function application
+# exp ::= App(?f, ?x)
+# We just push the argument, together with
+# the environment we'll need to eval it,
+# onto the stack for later.
+ev(App(?f, ?x), ?e, ?stack) == ev(?f, ?e, Cons(Closure(?x, ?e), ?stack))
+
+# to start evalling some code, use the empty environment and stack
+start(?c) == ev(?c, Empty, Nil)
+
+# the same, insufficient, test as in direct_terp.req:
+start(App(Lambda(x, Sym(x)), Quote(123)))
+
+# does not terminate
+#start(App(Lambda(x, App(Sym(x), Sym(x))), Lambda(x, App(Sym(x), Sym(x)))))
+
+# the K combinator applied to a quoted int and a nonterminating computation
+# lazy evaluation means we terminate, though the CEK machine doesn't.
+start(App(App(Lambda(x, Lambda(y, Sym(x))),
+              Quote(456)),
+          App(Lambda(x, App(Sym(x), Sym(x))),
+              Lambda(x, App(Sym(x), Sym(x))))))

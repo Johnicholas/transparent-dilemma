@@ -1,0 +1,122 @@
+# Okay, this is going to be very rough, sketchy, and informal.
+# The goal is to implement something like a pi-calculus interpreter.
+# The ultimate goal is to adapt this as for a productivity tool for humans.
+#
+# The idea is that human projects are like processes.
+# We could use operating system processes to model them, but
+# these projects go on for a long time - months, maybe years.
+# At that scale, we might switch computers or operating systems.
+#
+# A single-threaded term-rewriting-based model of concurrency would
+# be easy to persist.
+#
+# But first, let's get something like a pi-calculus interpreter to work at all.
+#
+# There's a grammar for pi-calculus (and a conventional concrete syntax, which will be ignored)
+# and it goes something like this:
+#
+# pi ::= Par(pi, pi)
+#     | Rep(pi)
+#     | PiNil
+#     | New(name, pi)
+#     | Out(name, name, pi)
+#     | Inp(name, name, pi)
+#
+# Rep seems like a forkbomb in the making - there are hints that there's a safer version that
+# is only used for creating reusable services, but I don't understand it yet.
+
+# Let's imagine that there is a round-robin queue of runnable processes,
+# where a process is a pair,
+# of a pi-calculus term and an environment binding names to channel numbers.
+# We also will need a register for gensymming new channels,
+# and another register to hold blocked processes.
+
+# PiNil is a process that does nothing.
+# When we find something that has become PiNil,
+# we just toss it out of the process list.
+step(Cons(Process(PiNil, ?env), ?processes), ?gensym, ?blockeds) == step(?processes, ?gensym, ?blockeds)
+
+# Par is normally written as a vertical bar
+# basically, we want to run 'run(?a, ?env)' and 'run(?b, ?env)' in parallel
+# we just decompose it into the general process list
+#
+# There's probably a more elegant way of doing this,
+# where there isn't a distinction between the process list
+# and the top of the current term,
+# using rewrites like Par(Par(?a, ?b), ?c) == Par(?a, Par(?b, ?c)),
+# but this is not elegant, or at least, not yet.)
+#
+# snoc is a helper function to put something on the end of the list.
+# There's no real reason to put the processes on the end of the list
+# rather than the front - if the new processes block,
+# they'll get moved into the blocked-processes list,
+# and we can get to the other runnable processes.
+#
+# Just unnecessary complexity that needs to be removed. Sigh.
+step(Cons(Process(Par(?a, ?b), ?env), ?processes), ?gensym, ?bs) ==
+    step(snoc(Process(?a, ?env), snoc(Process(?b, ?env), ?processes)), ?gensym, ?bs)
+
+# New(foo, p) creates a new channel, binds it to the local name foo, and then becomes the process p.
+# New uses gensym to create a new name,
+# and extends the environment of the term with that name/number binding.
+step(Cons(Process(New(?name, ?term), ?env), ?ps), ?gensym, ?other) ==
+    step(snoc(Process(?term, Extend(?name, ?gensym, ?env)), ?ps), ?gensym+1, ?other)
+
+# Out(?destination, ?msg, ?p) sends ?msg to ?destination,
+# and then becomes the process ?p
+#
+# Here we need to look at the blocked processes and see if there's someone
+# there who is registered underneath ?destination as a reciever.
+# if there isn't anything like that, then this process should block
+# underneath ?destination as a sender.
+# on the other hand, if there is someone waiting, then
+# we can take them out of the blocked list.
+step(Cons(Process(Out(?dst, ?msg, ?term), ?env), ?ps), ?gensym, ?bs) == 
+  send(?bs, ?dst, Send(?msg, ?term, ?env), ?ps, ?gensym, None)
+
+# Inp(?source, ?bind, ?p) reads a message from ?source,
+# binds the message to the name ?bind, and becomes the process ?p
+#
+# Again, we need to look at the blocked processes and see if there's someone
+# there who is registered underneath ?source as a sender,
+# and if there isn't anyone like that, block as a reciever.
+step(Cons(Process(Inp(?src, ?bind, ?term), ?env), ?ps), ?gensym, ?bs) ==
+  recv(?bs, ?src, Recv(?bind, ?term, ?env), ?ps, ?gensym, None)
+
+# Let's imagine that the blockeds are stored like so:
+# blockeds ::= None | Chan(name, blocked_process, blockeds)
+# blocked_process ::= Send(?message, ?term, ?env) | Recv(?bind, ?term, ?env)
+
+send(None, ?dst, ?sender, ?ps, ?gensym, ?searched) ==
+  step(?ps, ?gensym, Chan(?dst, ?sender, ?searched))
+
+send(Chan(?n1, ?blocked, ?bs), ?n2, ?sender, ?ps, ?gensym, ?searched_bs) ==
+  if ?n1 = ?n2 then unblock(?sender, ?blocked, ?ps, ?gensym, append(?bs, ?searched_bs)) else send(?bs, ?n2, ?sender, ?ps, Chan(?n1, Recv(?bind, ?t1, ?e1), ?searched_bs))
+
+recv(None, ?src, ?recvr, ?ps, ?gensym, ?searched) ==
+  step(?ps, ?gensym, Chan(?src, ?recvr, ?searched))
+
+recv(Chan(?n1, ?blocked, ?bs), ?n2, ?recver, ?ps, ?gensym, ?searched_bs) == 
+  if ?n1 = ?n2 then unblock(?blocked, ?recver, ?ps, ?gensym, append(?bs, ?searched_bs)) else recv(?bs, ?n2, ?recver, ?ps, ?gensym, Chan(?n1, ?blocked, ?searched_bs))
+
+# to start off, we use a singleton list of processes, the single process gets an empty environment,
+# the gensym counter starts at zero, and there are none blocked processes
+start(?term) == step(Cons(Process(?term, Empty), Nil), 0, None)
+
+# a few helper functions
+snoc(?x, Nil) == Cons(?x, Nil)
+snoc(?x, Cons(?y, ?ys)) == Cons(?y, snoc(?x, ?ys))
+append(None, ?ys) == ?ys
+append(Chan(?name, ?blocked, ?xs), ?ys) == Chan(?name, ?blocked, append(?xs, ?ys))
+unblock(Send(?actual, ?t1, ?e1), Recv(?formal, ?t2, ?e2), ?ps, ?gensym, ?bs) ==
+  step(snoc(Process(?t1, ?e1), snoc(Process(?t2, Extend(?formal, ?actual, ?e2)), ?ps)), ?gensym, ?bs)
+
+# This is vague, insufficient testing.
+# I don't really know how to write things in Pi calculus.
+# Rep is not implemented at all, and it seems necessary to getting much of anything done.
+start(PiNil)
+start(Par(PiNil, PiNil))
+start(New(foo, PiNil))
+start(New(foo, Inp(foo, bar, PiNil)))
+start(New(foo, Out(foo, bar, PiNil)))
+start(New(foo, Par(Inp(foo, bar, PiNil), Out(foo, bar, PiNil))))

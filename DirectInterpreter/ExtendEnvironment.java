@@ -29,7 +29,7 @@ public class ExtendEnvironment implements Environment
      */
     public Object lookup(String toFind)
     {
-        if (toFind == name) {
+        if (toFind.equals(name)) {
             return value;
         } else {
             return nextEnvironment.lookup(toFind);
